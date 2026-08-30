@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Трекер откликов</title>
+<style>
+  :root {
+    --bg: #fff;
+    --surface: #f7f7f6;
+    --dark: #302722;
+    --ink: #2b241f;
+    --muted: #6b615a;
+    --accent: #b0561f;
+    --line: #e3ded9;
+    --ok: #2f7d4f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 76rem; margin: 0 auto; padding: 1.5rem clamp(1rem, 3vw, 2rem) 4rem; }
+  h1 { font-size: 1.6rem; margin: 0 0 0.3rem; }
+  .sub { color: var(--muted); margin-bottom: 1.5rem; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem 1.1rem; }
+  .card b { display: block; font-size: 1.7rem; line-height: 1.1; color: var(--accent); }
+  .card span { color: var(--muted); font-size: 0.88rem; }
+
+  .alerts { display: grid; gap: 0.6rem; margin-bottom: 1.5rem; }
+  .alert { border-left: 3px solid var(--accent); background: #fdf6f1; padding: 0.6rem 0.9rem; border-radius: 0 8px 8px 0; font-size: 0.92rem; }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; align-items: center; }
+  .filters button, .filters input {
+    font: inherit; padding: 0.35rem 0.85rem; border: 1px solid var(--line);
+    border-radius: 999px; background: #fff; cursor: pointer;
+  }
+  .filters button.active { background: var(--dark); color: #fff; border-color: var(--dark); }
+  .filters input { cursor: text; min-width: 14rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.93rem; }
+  th, td { text-align: left; padding: 0.6rem 0.5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  tr:hover td { background: var(--surface); }
+  .company { font-weight: 600; }
+  .note { color: var(--muted); font-size: 0.86rem; display: block; margin-top: 0.2rem; }
+  .pill { display: inline-block; padding: 0.1rem 0.6rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
+  .s-researched { background: #eee9e4; color: #6b615a; }
+  .s-applied    { background: #fde8d8; color: #a04d18; }
+  .s-screening  { background: #dfe8fb; color: #2c4f9e; }
+  .s-interview  { background: #e0f0e5; color: #2f7d4f; }
+  .s-offer      { background: #2f7d4f; color: #fff; }
+  .s-rejected   { background: #f6dede; color: #9a3232; }
+  .s-declined, .s-skipped { background: #efefef; color: #888; }
+  .s-reserve    { background: #f3ecd8; color: #8a6d1f; }
+  .prio { font-weight: 700; color: var(--accent); }
+  .row-actions select, .row-actions button { font: inherit; font-size: 0.85rem; padding: 0.2rem 0.4rem; }
+  .empty { padding: 2rem; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Трекер откликов</h1>
+  <p class="sub">Вакансии, статусы, события и сроки в одном месте</p>
+
+  <div class="stats" id="stats"></div>
+  <div class="alerts" id="alerts"></div>
+
+  <div class="filters" id="filters">
+    <button data-status="" class="active">Все</button>
+    <button data-status="researched">Разобраны</button>
+    <button data-status="applied">Отклик отправлен</button>
+    <button data-status="screening">Скрининг</button>
+    <button data-status="interview">Интервью</button>
+    <button data-status="reserve">Резерв</button>
+    <button data-status="skipped">Пропущены</button>
+    <input id="search" type="search" placeholder="Поиск по компании или роли">
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:3rem">Пр.</th>
+        <th>Компания и роль</th>
+        <th style="width:9rem">Статус</th>
+        <th style="width:7rem">Формат</th>
+        <th style="width:8rem">Зарплата</th>
+        <th style="width:12rem">Действие</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="empty" id="empty" hidden>Ничего не найдено</div>
+</div>
+
+<script>
+const STATUS_LABEL = {
+  researched: "разобрана", applied: "отклик отправлен", screening: "скрининг",
+  interview: "интервью", offer: "оффер", rejected: "отказ",
+  declined: "отказался сам", skipped: "пропущена", reserve: "резерв",
+};
+const FORMAT_LABEL = { office: "офис", hybrid: "гибрид", remote: "удалёнка", unknown: "-" };
+const EVENTS = {
+  applied: "отклик отправлен", questionnaire: "прислали анкету", reply: "ответ рекрутёра",
+  call: "созвон", interview: "интервью", test_task: "тестовое",
+  offer: "оффер", rejection: "отказ", note: "заметка",
+};
+
+let currentStatus = "";
+let currentSearch = "";
+
+const money = (v) => v ? (v / 1000).toFixed(0) + "к" : null;
+
+function salaryText(v) {
+  const lo = money(v.salary_min), hi = money(v.salary_max);
+  if (lo && hi && lo !== hi) return `${lo}-${hi}`;
+  if (lo && v.salary_note === "от") return `от ${lo}`;
+  if (lo) return lo;
+  return "<span style='color:#b3aca6'>не указана</span>";
+}
+
+async function loadStats() {
+  const s = await (await fetch("/api/stats")).json();
+  document.getElementById("stats").innerHTML = `
+    <div class="card"><b>${s.total}</b><span>вакансий в базе</span></div>
+    <div class="card"><b>${s.applied_count}</b><span>откликов отправлено</span></div>
+    <div class="card"><b>${s.reply_rate}%</b><span>дали ответ</span></div>
+    <div class="card"><b>${s.by_status.interview || 0}</b><span>дошли до интервью</span></div>`;
+
+  const alerts = [];
+  if (s.stale.length) {
+    alerts.push(`<div class="alert"><b>Без ответа больше недели (${s.stale.length}):</b> ` +
+      s.stale.map(v => v.company.name).join(", ") + "</div>");
+  }
+  if (s.upcoming.length) {
+    alerts.push(`<div class="alert"><b>Ближайшие действия:</b> ` +
+      s.upcoming.map(v => `${v.company.name} - ${v.next_action || "проверить"} (${v.next_action_at})`).join("; ") + "</div>");
+  }
+  document.getElementById("alerts").innerHTML = alerts.join("");
+}
+
+async function loadRows() {
+  const params = new URLSearchParams();
+  if (currentStatus) params.set("status", currentStatus);
+  if (currentSearch.length > 1) params.set("search", currentSearch);
+  const list = await (await fetch("/api/vacancies?" + params)).json();
+
+  document.getElementById("empty").hidden = list.length > 0;
+  document.getElementById("rows").innerHTML = list.map(v => `
+    <tr>
+      <td class="prio">${v.priority}</td>
+      <td>
+        <span class="company">${v.company.name}</span> - ${v.title}
+        ${v.match_note ? `<span class="note">${v.match_note.slice(0, 120)}</span>` : ""}
+      </td>
+      <td><span class="pill s-${v.status}">${STATUS_LABEL[v.status] || v.status}</span></td>
+      <td>${FORMAT_LABEL[v.work_format]}</td>
+      <td>${salaryText(v)}</td>
+      <td class="row-actions">
+        <select onchange="addEvent(${v.id}, this.value); this.value='';">
+          <option value="">+ событие</option>
+          ${Object.entries(EVENTS).map(([k, label]) => `<option value="${k}">${label}</option>`).join("")}
+        </select>
+      </td>
+    </tr>`).join("");
+}
+
+async function addEvent(vacancyId, type) {
+  if (!type) return;
+  const title = prompt("Что произошло?", EVENTS[type]);
+  if (title === null) return;
+  await fetch(`/api/vacancies/${vacancyId}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type, title: title || EVENTS[type] }),
+  });
+  refresh();
+}
+
+function refresh() { loadStats(); loadRows(); }
+
+document.getElementById("filters").addEventListener("click", (e) => {
+  const button = e.target.closest("button[data-status]");
+  if (!button) return;
+  document.querySelectorAll("#filters button").forEach(b => b.classList.remove("active"));
+  button.classList.add("active");
+  currentStatus = button.dataset.status;
+  loadRows();
+});
+
+let searchTimer;
+document.getElementById("search").addEventListener("input", (e) => {
+  clearTimeout(searchTimer);
+  currentSearch = e.target.value.trim();
+  searchTimer = setTimeout(loadRows, 250);
+});
+
+refresh();
+</script>
+</body>
+</html>
