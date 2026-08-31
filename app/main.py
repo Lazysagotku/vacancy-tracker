@@ -112,23 +112,25 @@ def get_stats(session: Session = Depends(get_session)):
 def get_pitch(
     length: models.PitchLength = Query(default=models.PitchLength.standard),
     track: models.Track | None = Query(default=None),
+    audience: models.Audience = Query(default=models.Audience.both),
     session: Session = Depends(get_session),
 ):
-    """Рассказ о себе, собранный под длительность и тип вакансии."""
-    return crud.build_pitch(session, length=length, track=track)
+    """Рассказ о себе, собранный под длительность, тип вакансии и слушателя."""
+    return crud.build_pitch(session, length=length, track=track, audience=audience)
 
 
 @app.get("/api/vacancies/{vacancy_id}/pitch", response_model=schemas.Pitch, tags=["рассказ о себе"])
 def get_vacancy_pitch(
     vacancy_id: int,
     length: models.PitchLength = Query(default=models.PitchLength.standard),
+    audience: models.Audience = Query(default=models.Audience.both),
     session: Session = Depends(get_session),
 ):
-    """То же, но с акцентами под конкретную вакансию."""
+    """То же, но с акцентами и вопросами под конкретную вакансию."""
     vacancy = crud.get_vacancy(session, vacancy_id)
     if vacancy is None:
         raise HTTPException(status_code=404, detail="Вакансия не найдена")
-    return crud.build_pitch(session, length=length, vacancy=vacancy)
+    return crud.build_pitch(session, length=length, vacancy=vacancy, audience=audience)
 
 
 def _ics_escape(text: str) -> str:

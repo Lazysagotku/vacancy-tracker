@@ -62,6 +62,7 @@
   .fb:hover { background: #fff8f2; outline: 1px dashed var(--line); }
   .fb.empty-fb { color: #b3aca6; font-style: italic; }
   .fb textarea { font: inherit; width: 100%; min-height: 4.5rem; border: 1px solid var(--accent); border-radius: 6px; padding: 0.3rem; }
+  .fb-presets { font: inherit; font-size: 0.8rem; margin-top: 0.25rem; width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 0.15rem; cursor: pointer; }
 
   /* Кнопка рассказа о себе */
   .pitch-btn { border: 1px solid var(--ok); background: #eaf5ee; color: #235c3a; border-radius: 999px;
@@ -77,9 +78,32 @@
   .modal-head p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.9rem; }
   .modal-close { border: 1px solid var(--line); background: #fff; border-radius: 50%; width: 2rem; height: 2rem; font-size: 1.1rem; cursor: pointer; flex: none; }
 
-  .lengths { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
+  .lengths { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.6rem; align-items: center; }
   .lengths button { font: inherit; font-size: 0.86rem; padding: 0.3rem 0.8rem; border: 1px solid var(--line); background: #fff; border-radius: 999px; cursor: pointer; }
   .lengths button.active { background: var(--dark); color: #fff; border-color: var(--dark); }
+  .tabs-label { font-size: 0.82rem; color: var(--muted); min-width: 8.5rem; }
+  #audiences { margin-bottom: 1.2rem; }
+
+  .aud-tag { font-size: 0.72rem; font-weight: 600; padding: 0.05rem 0.4rem; border-radius: 999px; margin-left: 0.3rem; vertical-align: 0.08em; }
+  .aud-hr { background: #dfe8fb; color: #2c4f9e; }
+  .aud-tech { background: #e8e2f5; color: #57409c; }
+
+  /* Причина ухода: два слоя */
+  .reason { margin-top: 0.7rem; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .reason .say { padding: 0.5rem 0.7rem; background: #f2f8f4; font-size: 0.91rem; }
+  .reason .say b { color: #235c3a; }
+  .reason details { border-top: 1px solid var(--line); }
+  .reason summary { padding: 0.4rem 0.7rem; cursor: pointer; font-size: 0.85rem; color: var(--muted); background: #fbf9f8; }
+  .reason .truth { padding: 0.5rem 0.7rem; font-size: 0.88rem; white-space: pre-line; color: #7a3a3a; background: #fdf4f4; }
+
+  .qs { border-top: 1px solid var(--line); margin-top: 1.2rem; padding-top: 1rem; }
+  .qs h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+  .qs ol { margin: 0 0 1.1rem; padding-left: 1.3rem; }
+  .qs li { margin-bottom: 0.55rem; font-size: 0.93rem; }
+  .qs li span { display: block; color: var(--muted); font-size: 0.85rem; margin-top: 0.1rem; }
+  .asks { background: #fdf6f1; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 0.6rem 0.9rem; margin-bottom: 1rem; font-size: 0.9rem; }
+  .asks b { display: block; margin-bottom: 0.3rem; }
+  .asks ul { margin: 0; padding-left: 1.1rem; }
 
   .focus-box { background: #fdf6f1; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 0.7rem 1rem; margin-bottom: 1.2rem; font-size: 0.92rem; }
   .focus-box b { display: block; margin-bottom: 0.2rem; }
@@ -149,9 +173,16 @@
       <button class="modal-close" type="button" aria-label="Закрыть" onclick="closePitch()">×</button>
     </div>
     <div class="lengths" id="lengths">
+      <span class="tabs-label">Сколько времени:</span>
       <button data-len="short">40 секунд</button>
       <button data-len="standard" class="active">2 минуты</button>
       <button data-len="full">4-5 минут</button>
+    </div>
+    <div class="lengths" id="audiences">
+      <span class="tabs-label">Кто слушает:</span>
+      <button data-aud="hr">HR</button>
+      <button data-aud="tech">Техсобес</button>
+      <button data-aud="both" class="active">Всё вместе</button>
     </div>
     <div id="pitchBody"></div>
   </div>
@@ -178,6 +209,17 @@ let currentStatus = "";
 let currentSearch = "";
 let pitchVacancyId = null;
 let pitchLength = "standard";
+let pitchAudience = "both";
+
+// Готовые пометки для колонки фидбека - самые частые случаи
+const FEEDBACK_PRESETS = [
+  "Ответил на вопросы ИИ-помощника",
+  "Ответил на вопросы скрининга",
+  "Заполнил форму",
+  "Отправил анкету",
+  "Прошёл онлайн-интервью",
+  "Ответа нет",
+];
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const money = (v) => v ? (v / 1000).toFixed(0) + "к" : null;
@@ -249,11 +291,30 @@ async function editFeedback(cell, vacancyId) {
   cell.innerHTML = "";
   const area = document.createElement("textarea");
   area.value = current;
-  area.placeholder = "Что сказали после созвона или собеса";
+  area.placeholder = "Что сказали или что сделал на этом этапе";
   cell.appendChild(area);
+
+  // Быстрые заготовки: клик дописывает строку, не затирая уже написанное
+  const presets = document.createElement("select");
+  presets.className = "fb-presets";
+  presets.innerHTML = '<option value="">+ готовая пометка</option>' +
+    FEEDBACK_PRESETS.map(p => `<option value="${p}">${p}</option>`).join("");
+  presets.onchange = () => {
+    if (!presets.value) return;
+    const stamp = new Date().toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+    area.value = (area.value.trim() ? area.value.trim() + "\n" : "") + `${stamp}: ${presets.value}`;
+    presets.value = "";
+    area.focus();
+  };
+  presets.onmousedown = () => clearTimeout(blurTimer);
+  cell.appendChild(presets);
   area.focus();
 
+  let blurTimer;
+  let cancelled = false;
+
   const save = async () => {
+    if (cancelled) return;
     const value = area.value.trim();
     if (value !== current) {
       await fetch(`/api/vacancies/${vacancyId}`, {
@@ -264,10 +325,16 @@ async function editFeedback(cell, vacancyId) {
     }
     loadRows();
   };
-  area.addEventListener("blur", save, { once: true });
+
+  // Сохраняем с задержкой: клик по списку заготовок не должен закрывать поле
+  const onBlur = () => { blurTimer = setTimeout(save, 150); };
+  area.addEventListener("blur", onBlur);
+  presets.addEventListener("blur", onBlur);
+  area.addEventListener("focus", () => clearTimeout(blurTimer));
+
   area.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { area.removeEventListener("blur", save); loadRows(); }
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) area.blur();
+    if (e.key === "Escape") { cancelled = true; clearTimeout(blurTimer); loadRows(); }
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { clearTimeout(blurTimer); save(); }
   });
 }
 
@@ -298,10 +365,11 @@ function closePitch() {
 }
 
 async function renderPitch() {
-  const p = await (await fetch(`/api/vacancies/${pitchVacancyId}/pitch?length=${pitchLength}`)).json();
+  const p = await (await fetch(
+    `/api/vacancies/${pitchVacancyId}/pitch?length=${pitchLength}&audience=${pitchAudience}`)).json();
 
   document.getElementById("pitchFor").textContent =
-    `${p.company} - ${p.vacancy_title} · ${p.length_label}` +
+    `${p.company} - ${p.vacancy_title} · ${p.length_label} · ${p.audience_label}` +
     (p.track ? ` · акценты под «${TRACK_LABEL[p.track] || p.track}»` : " · тип вакансии не определён");
 
   const parts = [];
@@ -318,17 +386,44 @@ async function renderPitch() {
       подбирались под неё.</div>`);
   }
 
+  const audTag = (a) => a === "both" ? ""
+    : `<span class="aud-tag aud-${a}">${a === "hr" ? "для HR" : "для техсобеса"}</span>`;
+
   parts.push(p.blocks.map(b => `
     <div class="brick">
       <h3>${esc(b.title)}</h3>
       ${b.period ? `<div class="period">${esc(b.period)}</div>` : ""}
       <p class="core">${esc(b.core_line)}</p>
       ${b.addons.length ? `<ul>${b.addons.map(a =>
-        `<li class="${a.fits_track ? "fit" : ""}"><b>${esc(a.label)}:</b> ${esc(a.text)}</li>`).join("")}</ul>` : ""}
+        `<li class="${a.fits_track ? "fit" : ""}"><b>${esc(a.label)}:</b> ${esc(a.text)}${audTag(a.audience)}</li>`
+      ).join("")}</ul>` : ""}
+      ${b.reason_public ? `<div class="reason">
+        <div class="say"><b>Почему ушёл - говорим так:</b> ${esc(b.reason_public)}</div>
+        ${b.reason_real ? `<details>
+          <summary>Как было на самом деле (вслух не произносим)</summary>
+          <div class="truth">${esc(b.reason_real)}</div>
+        </details>` : ""}
+      </div>` : ""}
       ${b.hint ? `<div class="hint">${esc(b.hint)}</div>` : ""}
     </div>`).join(""));
 
   const list = (items, render) => items.map(render).join("");
+
+  // Вопросы: что спросить на этом этапе
+  if (p.probe.length || p.interest.length || p.vacancy_asks.length) {
+    const stage = p.audience === "hr" ? "на HR-этапе"
+                : p.audience === "tech" ? "на техсобесе" : "на собеседовании";
+    parts.push(`<div class="qs">
+      <h4>Что спросить ${stage}</h4>
+      ${p.vacancy_asks.length ? `<div class="asks"><b>Именно по этой вакансии:</b>
+        <ul>${list(p.vacancy_asks, a => `<li>${esc(a)}</li>`)}</ul></div>` : ""}
+      ${p.probe.length ? `<h4>Узнать важное для решения</h4>
+        <ol>${list(p.probe, q => `<li>${esc(q.text)}<span>${esc(q.note || "")}</span></li>`)}</ol>` : ""}
+      ${p.interest.length ? `<h4>Показать заинтересованность</h4>
+        <ol>${list(p.interest, q => `<li>${esc(q.text)}<span>${esc(q.note || "")}</span></li>`)}</ol>` : ""}
+    </div>`);
+  }
+
   parts.push(`<div class="tips">
     <h4>Крючки - сказать коротко и ждать вопроса</h4>
     <ul>${list(p.hooks, t => `<li>${esc(t.title)} <span>${esc(t.body || "")}</span></li>`)}</ul>
@@ -347,6 +442,15 @@ document.getElementById("lengths").addEventListener("click", (e) => {
   document.querySelectorAll("#lengths button").forEach(b => b.classList.remove("active"));
   button.classList.add("active");
   pitchLength = button.dataset.len;
+  renderPitch();
+});
+
+document.getElementById("audiences").addEventListener("click", (e) => {
+  const button = e.target.closest("button[data-aud]");
+  if (!button) return;
+  document.querySelectorAll("#audiences button").forEach(b => b.classList.remove("active"));
+  button.classList.add("active");
+  pitchAudience = button.dataset.aud;
   renderPitch();
 });
 

@@ -134,16 +134,47 @@ def guess_track(vacancy: models.Vacancy) -> models.Track | None:
     return None
 
 
+AUDIENCE_LABEL = {
+    models.Audience.hr: "HR-этап - слушают результат, масштаб и людей",
+    models.Audience.tech: "техсобес - слушают, как именно устроено и что решал",
+    models.Audience.both: "без деления по слушателю",
+}
+
+
+def vacancy_asks(vacancy: models.Vacancy | None) -> list[str]:
+    """Что уточнить именно по этой вакансии - выводится из её же данных."""
+    if vacancy is None:
+        return []
+
+    asks: list[str] = []
+    if vacancy.salary_min is None and vacancy.salary_max is None:
+        asks.append("Вилка не указана - спросить про неё, и лучше первым вопросом.")
+    if vacancy.work_format is models.WorkFormat.unknown:
+        asks.append("Формат работы неизвестен - уточнить офис, гибрид или удалёнка.")
+
+    # Всё, что при разборе помечено как настораживающее, стоит проговорить вслух
+    for line in (vacancy.match_note or "").splitlines():
+        line = line.strip()
+        if line.startswith("⚠️") or "СВЕРИТЬ" in line or "решить" in line.lower():
+            asks.append(line.lstrip("⚠️ ").strip())
+
+    if vacancy.status is models.Status.screening:
+        asks.append("Уточнить, сколько всего этапов впереди и что на каждом проверяют.")
+    return asks
+
+
 def build_pitch(
     session: Session,
     length: models.PitchLength = models.PitchLength.standard,
     vacancy: models.Vacancy | None = None,
     track: models.Track | None = None,
+    audience: models.Audience = models.Audience.both,
 ) -> schemas.Pitch:
-    """Собирает рассказ о себе под длительность и тип вакансии.
+    """Собирает рассказ о себе под длительность, тип вакансии и слушателя.
 
-    Сборка идёт по скрипту: короткая версия - только опорные предложения без
-    Альфа-Банка, длинные - с добавками, причём первыми идут те, что усилены под трек.
+    Три измерения: сколько времени есть, какая это вакансия и кто напротив.
+    Короткая версия - только опорные предложения без Альфа-Банка. В длинных
+    первыми идут добавки, подходящие треку и слушателю.
     """
     if track is None and vacancy is not None:
         track = guess_track(vacancy)
@@ -168,8 +199,10 @@ def build_pitch(
 
         chosen: list[models.PitchAddon] = []
         if limit:
-            fitting = [a for a in block.addons if a.fits(track)]
-            rest = [a for a in block.addons if not a.fits(track)]
+            suited = [a for a in block.addons if a.for_audience(audience)]
+            # Первыми - те, что и под трек, и под слушателя
+            fitting = [a for a in suited if a.fits(track)]
+            rest = [a for a in suited if not a.fits(track)]
             chosen = (fitting + rest)[:limit]
             highlights.extend(f"{block.title}: {a.label}" for a in fitting[:limit])
 
@@ -180,8 +213,12 @@ def build_pitch(
                 period=block.period,
                 core_line=core,
                 hint=block.hint,
+                reason_public=block.reason_public,
+                reason_real=block.reason_real,
                 addons=[
-                    schemas.AddonRead(label=a.label, text=a.text, fits_track=a.fits(track))
+                    schemas.AddonRead(
+                        label=a.label, text=a.text, audience=a.audience, fits_track=a.fits(track)
+                    )
                     for a in chosen
                 ],
             )
@@ -196,9 +233,22 @@ def build_pitch(
     tips = list(session.scalars(select(models.PitchTip).order_by(models.PitchTip.position)))
     pick = lambda kind: [schemas.TipRead.model_validate(t) for t in tips if t.kind == kind]
 
+    # Вопросы для того этапа, на котором сейчас находимся
+    q_stmt = select(models.StageQuestion).order_by(models.StageQuestion.position)
+    if audience is not models.Audience.both:
+        q_stmt = q_stmt.where(
+            models.StageQuestion.audience.in_([audience, models.Audience.both])
+        )
+    questions = list(session.scalars(q_stmt))
+    ask = lambda kind: [
+        schemas.QuestionRead.model_validate(q) for q in questions if q.kind == kind
+    ]
+
     return schemas.Pitch(
         length=length,
         length_label=LENGTH_LABEL[length],
+        audience=audience,
+        audience_label=AUDIENCE_LABEL[audience],
         track=track,
         vacancy_id=vacancy.id if vacancy else None,
         vacancy_title=vacancy.title if vacancy else None,
@@ -209,6 +259,9 @@ def build_pitch(
         hooks=pick("hook"),
         faq=pick("faq"),
         avoid=pick("avoid"),
+        probe=ask("probe"),
+        interest=ask("interest"),
+        vacancy_asks=vacancy_asks(vacancy),
     )
 
 

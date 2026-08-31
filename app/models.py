@@ -64,6 +64,14 @@ class Track(str, enum.Enum):
     ai = "ai"            # ИИ-инженер, автоматизация
 
 
+class Audience(str, enum.Enum):
+    """Кто слушает: HR и технический интервьюер слышат разное."""
+
+    hr = "hr"      # результат для бизнеса, масштаб, люди, процессы
+    tech = "tech"  # как устроено, чем именно, какие решения принимал
+    both = "both"
+
+
 class PitchLength(str, enum.Enum):
     """Сборки рассказа по времени."""
 
@@ -165,6 +173,10 @@ class PitchBlock(Base):
     in_short: Mapped[bool] = mapped_column(Boolean, default=True)   # входит ли в сборку на 40 секунд
     hint: Mapped[str | None] = mapped_column(Text)                  # как произносить
 
+    # Причина ухода в двух слоях: что произносим вслух и что было на самом деле
+    reason_public: Mapped[str | None] = mapped_column(Text)
+    reason_real: Mapped[str | None] = mapped_column(Text)
+
     addons: Mapped[list["PitchAddon"]] = relationship(
         back_populates="block", cascade="all, delete-orphan", order_by="PitchAddon.position"
     )
@@ -181,6 +193,9 @@ class PitchAddon(Base):
     label: Mapped[str] = mapped_column(String(100))
     text: Mapped[str] = mapped_column(Text)
     tracks: Mapped[str | None] = mapped_column(String(100))   # где добавка сильна: "dev,ai"
+    audience: Mapped[Audience] = mapped_column(
+        Enum(Audience, name="addon_audience"), default=Audience.both
+    )
 
     block: Mapped["PitchBlock"] = relationship(back_populates="addons")
 
@@ -188,6 +203,12 @@ class PitchAddon(Base):
         if track is None or not self.tracks:
             return False
         return track.value in [t.strip() for t in self.tracks.split(",")]
+
+    def for_audience(self, audience: Audience | None) -> bool:
+        """Подходит ли добавка тому, кто сейчас слушает."""
+        if audience is None or audience is Audience.both:
+            return True
+        return self.audience in (audience, Audience.both)
 
 
 class TrackFocus(Base):
@@ -212,6 +233,23 @@ class PitchTip(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     title: Mapped[str] = mapped_column(String(300))
     body: Mapped[str | None] = mapped_column(Text)
+
+
+class StageQuestion(Base):
+    """Вопросы, которые задаёт Иван - на HR-этапе и на техсобесе.
+
+    Делятся на два вида: узнать важное для решения и показать заинтересованность.
+    """
+
+    __tablename__ = "stage_questions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    audience: Mapped[Audience] = mapped_column(Enum(Audience, name="question_audience"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), index=True)   # probe | interest
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    text: Mapped[str] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)             # зачем спрашивать
+    tracks: Mapped[str | None] = mapped_column(String(100))
 
 
 class Contact(Base):

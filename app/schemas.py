@@ -6,7 +6,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models import EventType, PitchLength, Status, Track, WorkFormat
+from app.models import Audience, EventType, PitchLength, Status, Track, WorkFormat
 
 
 class CompanyBase(BaseModel):
@@ -108,6 +108,7 @@ class AddonRead(BaseModel):
 
     label: str
     text: str
+    audience: Audience = Audience.both
     fits_track: bool = False   # усилена ли эта добавка под трек вакансии
 
 
@@ -119,7 +120,18 @@ class PitchBlockRead(BaseModel):
     period: str | None = None
     core_line: str
     hint: str | None = None
+    reason_public: str | None = None   # что говорить про уход
+    reason_real: str | None = None     # как было на самом деле, вслух не произносим
     addons: list[AddonRead] = []
+
+
+class QuestionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    audience: Audience
+    kind: str
+    text: str
+    note: str | None = None
 
 
 class FocusRead(BaseModel):
@@ -144,6 +156,8 @@ class Pitch(BaseModel):
 
     length: PitchLength
     length_label: str
+    audience: Audience
+    audience_label: str
     track: Track | None = None
     vacancy_id: int | None = None
     vacancy_title: str | None = None
@@ -154,6 +168,9 @@ class Pitch(BaseModel):
     hooks: list[TipRead] = []
     faq: list[TipRead] = []
     avoid: list[TipRead] = []
+    probe: list[QuestionRead] = []      # вопросы, чтобы узнать важное
+    interest: list[QuestionRead] = []   # вопросы, показывающие заинтересованность
+    vacancy_asks: list[str] = []        # что уточнить именно по этой вакансии
 
 
 class Stats(BaseModel):
