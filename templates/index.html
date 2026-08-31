@@ -4,22 +4,100 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Трекер откликов</title>
+<script>
+  // До отрисовки: сохранённый выбор, иначе системная тема
+  (() => {
+    let saved = null;
+    try { saved = localStorage.getItem("theme"); } catch (e) {}
+    const dark = saved ? saved === "dark"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+  })();
+</script>
 <style>
   :root {
+    color-scheme: light;
     --bg: #fff;
-    --surface: #f7f7f6;
-    --dark: #302722;
+    --surface: #f7f7f6;      /* карточки, подсветка строк */
+    --raised: #fff;          /* модалка, кнопки, поля ввода */
+    --dark: #302722;         /* фон активной кнопки */
+    --on-dark: #fff;
     --ink: #2b241f;
     --muted: #6b615a;
+    --faint: #b3aca6;        /* «не указана», плейсхолдеры */
     --accent: #b0561f;
+    --accent-soft: #fdf6f1;  /* фон плашек с акцентом */
+    --accent-hover: #fff8f2;
     --line: #e3ded9;
     --ok: #2f7d4f;
+    --ok-soft: #eaf5ee;
+    --ok-ink: #235c3a;
+    --on-ok: #fff;
+    --say-soft: #f2f8f4;     /* «говорим так» */
+    --truth-soft: #fdf4f4;   /* «как было на самом деле» */
+    --truth-ink: #7a3a3a;
+    --summary-bg: #fbf9f8;
+    --overlay: rgba(30, 24, 20, 0.55);
+
+    --st-researched-bg: #eee9e4; --st-researched-ink: #6b615a;
+    --st-applied-bg:    #fde8d8; --st-applied-ink:    #a04d18;
+    --st-screening-bg:  #dfe8fb; --st-screening-ink:  #2c4f9e;
+    --st-interview-bg:  #e0f0e5; --st-interview-ink:  #2f7d4f;
+    --st-offer-bg:      #2f7d4f; --st-offer-ink:      #fff;
+    --st-rejected-bg:   #f6dede; --st-rejected-ink:   #9a3232;
+    --st-muted-bg:      #efefef; --st-muted-ink:      #888;
+    --st-reserve-bg:    #f3ecd8; --st-reserve-ink:    #8a6d1f;
+    --aud-hr-bg:        #dfe8fb; --aud-hr-ink:        #2c4f9e;
+    --aud-tech-bg:      #e8e2f5; --aud-tech-ink:      #57409c;
+  }
+
+  /* Тёмная тема. Атрибут data-theme проставляется до отрисовки, поэтому
+     белой вспышки при загрузке нет. color-scheme переводит в тёмное и
+     системные элементы: скроллбары, выпадающие списки, поля ввода. */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #17130f;
+    --surface: #201a16;
+    --raised: #251e19;
+    --dark: #e8ddd4;
+    --on-dark: #201a16;
+    --ink: #ece4dc;
+    --muted: #a2968b;
+    --faint: #6e635a;
+    --accent: #e08b4e;
+    --accent-soft: #2b2018;
+    --accent-hover: #2a2019;
+    --line: #362d26;
+    --ok: #4fa876;
+    --ok-soft: #1c2c22;
+    --ok-ink: #8fd0a8;
+    --on-ok: #102016;
+    --say-soft: #1b2a20;
+    --truth-soft: #2d1e1e;
+    --truth-ink: #e2a5a5;
+    --summary-bg: #221c17;
+    --overlay: rgba(0, 0, 0, 0.7);
+
+    --st-researched-bg: #2c2621; --st-researched-ink: #ab9e92;
+    --st-applied-bg:    #3a2617; --st-applied-ink:    #e8a86e;
+    --st-screening-bg:  #1e2740; --st-screening-ink:  #9bb8ee;
+    --st-interview-bg:  #1c2c22; --st-interview-ink:  #86cca1;
+    --st-offer-bg:      #2f7d4f; --st-offer-ink:      #fff;
+    --st-rejected-bg:   #3a2020; --st-rejected-ink:   #e8a2a2;
+    --st-muted-bg:      #2a2724; --st-muted-ink:      #918879;
+    --st-reserve-bg:    #322a17; --st-reserve-ink:    #dcc175;
+    --aud-hr-bg:        #1e2740; --aud-hr-ink:        #9bb8ee;
+    --aud-tech-bg:      #272040; --aud-tech-ink:      #b8a8ee;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 "Segoe UI", system-ui, sans-serif; }
   .wrap { max-width: 76rem; margin: 0 auto; padding: 1.5rem clamp(1rem, 3vw, 2rem) 4rem; }
   h1 { font-size: 1.6rem; margin: 0 0 0.3rem; }
   .sub { color: var(--muted); margin-bottom: 1.5rem; }
+  .head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .theme-toggle { font: inherit; font-size: 1.1rem; line-height: 1; padding: 0.4rem 0.6rem; border: 1px solid var(--line);
+                  background: var(--raised); color: inherit; border-radius: 999px; cursor: pointer; flex: none; }
+  .theme-toggle:hover { border-color: var(--accent); }
 
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem 1.1rem; }
@@ -27,14 +105,14 @@
   .card span { color: var(--muted); font-size: 0.88rem; }
 
   .alerts { display: grid; gap: 0.6rem; margin-bottom: 1.5rem; }
-  .alert { border-left: 3px solid var(--accent); background: #fdf6f1; padding: 0.6rem 0.9rem; border-radius: 0 8px 8px 0; font-size: 0.92rem; }
+  .alert { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 0.6rem 0.9rem; border-radius: 0 8px 8px 0; font-size: 0.92rem; }
 
   .filters { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; align-items: center; }
   .filters button, .filters input {
     font: inherit; padding: 0.35rem 0.85rem; border: 1px solid var(--line);
-    border-radius: 999px; background: #fff; cursor: pointer;
+    border-radius: 999px; background: var(--raised); color: inherit; cursor: pointer;
   }
-  .filters button.active { background: var(--dark); color: #fff; border-color: var(--dark); }
+  .filters button.active { background: var(--dark); color: var(--on-dark); border-color: var(--dark); }
   .filters input { cursor: text; min-width: 14rem; }
 
   table { width: 100%; border-collapse: collapse; font-size: 0.93rem; }
@@ -44,68 +122,70 @@
   .company { font-weight: 600; }
   .note { color: var(--muted); font-size: 0.86rem; display: block; margin-top: 0.2rem; }
   .pill { display: inline-block; padding: 0.1rem 0.6rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
-  .s-researched { background: #eee9e4; color: #6b615a; }
-  .s-applied    { background: #fde8d8; color: #a04d18; }
-  .s-screening  { background: #dfe8fb; color: #2c4f9e; }
-  .s-interview  { background: #e0f0e5; color: #2f7d4f; }
-  .s-offer      { background: #2f7d4f; color: #fff; }
-  .s-rejected   { background: #f6dede; color: #9a3232; }
-  .s-declined, .s-skipped { background: #efefef; color: #888; }
-  .s-reserve    { background: #f3ecd8; color: #8a6d1f; }
+  .s-researched { background: var(--st-researched-bg); color: var(--st-researched-ink); }
+  .s-applied    { background: var(--st-applied-bg); color: var(--st-applied-ink); }
+  .s-screening  { background: var(--st-screening-bg); color: var(--st-screening-ink); }
+  .s-interview  { background: var(--st-interview-bg); color: var(--st-interview-ink); }
+  .s-offer      { background: var(--st-offer-bg); color: var(--st-offer-ink); }
+  .s-rejected   { background: var(--st-rejected-bg); color: var(--st-rejected-ink); }
+  .s-declined, .s-skipped { background: var(--st-muted-bg); color: var(--st-muted-ink); }
+  .s-reserve    { background: var(--st-reserve-bg); color: var(--st-reserve-ink); }
   .prio { font-weight: 700; color: var(--accent); }
   .row-actions select, .row-actions button { font: inherit; font-size: 0.85rem; padding: 0.2rem 0.4rem; }
   .row-actions { white-space: nowrap; }
   .empty { padding: 2rem; text-align: center; color: var(--muted); }
+  .faint { color: var(--faint); }
+  select, textarea, input { background: var(--raised); color: inherit; border-color: var(--line); }
 
   /* Фидбек: правится по клику прямо в таблице */
   .fb { cursor: text; min-height: 1.2rem; font-size: 0.86rem; color: var(--ink); }
-  .fb:hover { background: #fff8f2; outline: 1px dashed var(--line); }
-  .fb.empty-fb { color: #b3aca6; font-style: italic; }
-  .fb textarea { font: inherit; width: 100%; min-height: 4.5rem; border: 1px solid var(--accent); border-radius: 6px; padding: 0.3rem; }
+  .fb:hover { background: var(--accent-hover); outline: 1px dashed var(--line); }
+  .fb.empty-fb { color: var(--faint); font-style: italic; }
+  .fb textarea { font: inherit; width: 100%; min-height: 4.5rem; border: 1px solid var(--accent); border-radius: 6px; padding: 0.3rem; background: var(--raised); color: inherit; }
   .fb-presets { font: inherit; font-size: 0.8rem; margin-top: 0.25rem; width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 0.15rem; cursor: pointer; }
 
   /* Кнопка рассказа о себе */
-  .pitch-btn { border: 1px solid var(--ok); background: #eaf5ee; color: #235c3a; border-radius: 999px;
+  .pitch-btn { border: 1px solid var(--ok); background: var(--ok-soft); color: var(--ok-ink); border-radius: 999px;
                cursor: pointer; font-weight: 600; white-space: nowrap; margin-top: 0.3rem; display: block; }
-  .pitch-btn:hover { background: var(--ok); color: #fff; }
+  .pitch-btn:hover { background: var(--ok); color: var(--on-ok); }
 
   /* Окно самопрезентации */
-  .modal { position: fixed; inset: 0; z-index: 50; background: rgba(30, 24, 20, 0.55); display: grid; place-items: center; padding: 1.5rem; }
+  .modal { position: fixed; inset: 0; z-index: 50; background: var(--overlay); display: grid; place-items: center; padding: 1.5rem; }
   .modal[hidden] { display: none; }
-  .modal-box { background: #fff; border-radius: 14px; max-width: 54rem; width: 100%; max-height: 88vh; overflow: auto; padding: 1.5rem clamp(1rem, 3vw, 2rem) 2rem; }
+  .modal-box { background: var(--raised); border-radius: 14px; max-width: 54rem; width: 100%; max-height: 88vh; overflow: auto; padding: 1.5rem clamp(1rem, 3vw, 2rem) 2rem; }
   .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; border-bottom: 1px solid var(--line); padding-bottom: 0.8rem; margin-bottom: 1rem; }
   .modal-head h2 { margin: 0; font-size: 1.25rem; }
   .modal-head p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.9rem; }
-  .modal-close { border: 1px solid var(--line); background: #fff; border-radius: 50%; width: 2rem; height: 2rem; font-size: 1.1rem; cursor: pointer; flex: none; }
+  .modal-close { border: 1px solid var(--line); background: var(--raised); color: inherit; border-radius: 50%; width: 2rem; height: 2rem; font-size: 1.1rem; cursor: pointer; flex: none; }
 
   .lengths { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.6rem; align-items: center; }
-  .lengths button { font: inherit; font-size: 0.86rem; padding: 0.3rem 0.8rem; border: 1px solid var(--line); background: #fff; border-radius: 999px; cursor: pointer; }
-  .lengths button.active { background: var(--dark); color: #fff; border-color: var(--dark); }
+  .lengths button { font: inherit; font-size: 0.86rem; padding: 0.3rem 0.8rem; border: 1px solid var(--line); background: var(--raised); color: inherit; border-radius: 999px; cursor: pointer; }
+  .lengths button.active { background: var(--dark); color: var(--on-dark); border-color: var(--dark); }
   .tabs-label { font-size: 0.82rem; color: var(--muted); min-width: 8.5rem; }
   #audiences { margin-bottom: 1.2rem; }
 
   .aud-tag { font-size: 0.72rem; font-weight: 600; padding: 0.05rem 0.4rem; border-radius: 999px; margin-left: 0.3rem; vertical-align: 0.08em; }
-  .aud-hr { background: #dfe8fb; color: #2c4f9e; }
-  .aud-tech { background: #e8e2f5; color: #57409c; }
+  .aud-hr { background: var(--aud-hr-bg); color: var(--aud-hr-ink); }
+  .aud-tech { background: var(--aud-tech-bg); color: var(--aud-tech-ink); }
 
   /* Причина ухода: два слоя */
   .reason { margin-top: 0.7rem; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .reason .say { padding: 0.5rem 0.7rem; background: #f2f8f4; font-size: 0.91rem; }
-  .reason .say b { color: #235c3a; }
+  .reason .say { padding: 0.5rem 0.7rem; background: var(--say-soft); font-size: 0.91rem; }
+  .reason .say b { color: var(--ok-ink); }
   .reason details { border-top: 1px solid var(--line); }
-  .reason summary { padding: 0.4rem 0.7rem; cursor: pointer; font-size: 0.85rem; color: var(--muted); background: #fbf9f8; }
-  .reason .truth { padding: 0.5rem 0.7rem; font-size: 0.88rem; white-space: pre-line; color: #7a3a3a; background: #fdf4f4; }
+  .reason summary { padding: 0.4rem 0.7rem; cursor: pointer; font-size: 0.85rem; color: var(--muted); background: var(--summary-bg); }
+  .reason .truth { padding: 0.5rem 0.7rem; font-size: 0.88rem; white-space: pre-line; color: var(--truth-ink); background: var(--truth-soft); }
 
   .qs { border-top: 1px solid var(--line); margin-top: 1.2rem; padding-top: 1rem; }
   .qs h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
   .qs ol { margin: 0 0 1.1rem; padding-left: 1.3rem; }
   .qs li { margin-bottom: 0.55rem; font-size: 0.93rem; }
   .qs li span { display: block; color: var(--muted); font-size: 0.85rem; margin-top: 0.1rem; }
-  .asks { background: #fdf6f1; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 0.6rem 0.9rem; margin-bottom: 1rem; font-size: 0.9rem; }
+  .asks { background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 0.6rem 0.9rem; margin-bottom: 1rem; font-size: 0.9rem; }
   .asks b { display: block; margin-bottom: 0.3rem; }
   .asks ul { margin: 0; padding-left: 1.1rem; }
 
-  .focus-box { background: #fdf6f1; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 0.7rem 1rem; margin-bottom: 1.2rem; font-size: 0.92rem; }
+  .focus-box { background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 0.7rem 1rem; margin-bottom: 1.2rem; font-size: 0.92rem; }
   .focus-box b { display: block; margin-bottom: 0.2rem; }
   .focus-box .drop { color: var(--muted); margin-top: 0.4rem; }
 
@@ -117,8 +197,8 @@
   .brick ul { margin: 0.6rem 0 0; padding-left: 1.1rem; }
   .brick li { margin-bottom: 0.45rem; font-size: 0.93rem; }
   .brick li b { color: var(--accent); }
-  .brick li.fit { background: #eaf5ee; border-radius: 6px; padding: 0.2rem 0.4rem; margin-left: -0.4rem; }
-  .brick li.fit b { color: #235c3a; }
+  .brick li.fit { background: var(--ok-soft); border-radius: 6px; padding: 0.2rem 0.4rem; margin-left: -0.4rem; }
+  .brick li.fit b { color: var(--ok-ink); }
 
   .tips { border-top: 1px solid var(--line); margin-top: 1.2rem; padding-top: 1rem; }
   .tips h4 { margin: 0 0 0.4rem; font-size: 0.92rem; }
@@ -129,8 +209,13 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Трекер откликов</h1>
-  <p class="sub">Вакансии, статусы, события и сроки в одном месте · <a href="/calendar.ics">📅 в календарь (.ics)</a></p>
+  <div class="head-row">
+    <div>
+      <h1>Трекер откликов</h1>
+      <p class="sub">Вакансии, статусы, события и сроки в одном месте · <a href="/calendar.ics">📅 в календарь (.ics)</a></p>
+    </div>
+    <button class="theme-toggle" type="button" id="themeToggle" title="Переключить тему"></button>
+  </div>
 
   <div class="stats" id="stats"></div>
   <div class="alerts" id="alerts"></div>
@@ -229,7 +314,7 @@ function salaryText(v) {
   if (lo && hi && lo !== hi) return `${lo}-${hi}`;
   if (lo && v.salary_note === "от") return `от ${lo}`;
   if (lo) return lo;
-  return "<span style='color:#b3aca6'>не указана</span>";
+  return "<span class='faint'>не указана</span>";
 }
 
 async function loadStats() {
@@ -479,6 +564,23 @@ document.getElementById("search").addEventListener("input", (e) => {
   searchTimer = setTimeout(loadRows, 250);
 });
 
+// --- Переключение темы ---
+const themeButton = document.getElementById("themeToggle");
+
+function paintThemeButton() {
+  const dark = document.documentElement.dataset.theme === "dark";
+  themeButton.textContent = dark ? "☀️" : "🌙";
+  themeButton.setAttribute("aria-label", dark ? "Включить светлую тему" : "Включить тёмную тему");
+}
+
+themeButton.addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("theme", next); } catch (e) {}
+  paintThemeButton();
+});
+
+paintThemeButton();
 refresh();
 </script>
 </body>
