@@ -109,6 +109,109 @@ def add_event(
     return event
 
 
+LENGTH_LABEL = {
+    models.PitchLength.short: "40 секунд - HR просит коротко",
+    models.PitchLength.standard: "2 минуты - основной вариант",
+    models.PitchLength.full: "4-5 минут - технарь просит подробно",
+}
+
+# Подсказки по ключевым словам вакансии, если трек не проставлен вручную
+TRACK_HINTS = {
+    models.Track.dev: ("c#", ".net", "backend", "бэкенд", "разработчик", "программист"),
+    models.Track.ai: ("ai", "ии", "llm", "prompt", "нейросет", "автоматизац", "агент"),
+    models.Track.support: ("поддержк", "сопровожден", "l2", "l3", "инженер", "эксплуатац", "данных"),
+}
+
+
+def guess_track(vacancy: models.Vacancy) -> models.Track | None:
+    """Если трек не проставлен - угадываем по названию роли."""
+    if vacancy.track is not None:
+        return vacancy.track
+    title = vacancy.title.lower()
+    for track, words in TRACK_HINTS.items():
+        if any(word in title for word in words):
+            return track
+    return None
+
+
+def build_pitch(
+    session: Session,
+    length: models.PitchLength = models.PitchLength.standard,
+    vacancy: models.Vacancy | None = None,
+    track: models.Track | None = None,
+) -> schemas.Pitch:
+    """Собирает рассказ о себе под длительность и тип вакансии.
+
+    Сборка идёт по скрипту: короткая версия - только опорные предложения без
+    Альфа-Банка, длинные - с добавками, причём первыми идут те, что усилены под трек.
+    """
+    if track is None and vacancy is not None:
+        track = guess_track(vacancy)
+
+    limit = models.ADDONS_PER_LENGTH[length]
+    blocks_stmt = (
+        select(models.PitchBlock)
+        .options(selectinload(models.PitchBlock.addons))
+        .order_by(models.PitchBlock.position)
+    )
+
+    blocks: list[schemas.PitchBlockRead] = []
+    highlights: list[str] = []
+
+    for block in session.scalars(blocks_stmt):
+        if length is models.PitchLength.short and not block.in_short:
+            continue
+
+        core = block.core_line
+        if block.core_line_alt and track is not None and block.alt_for_track is track:
+            core = block.core_line_alt
+
+        chosen: list[models.PitchAddon] = []
+        if limit:
+            fitting = [a for a in block.addons if a.fits(track)]
+            rest = [a for a in block.addons if not a.fits(track)]
+            chosen = (fitting + rest)[:limit]
+            highlights.extend(f"{block.title}: {a.label}" for a in fitting[:limit])
+
+        blocks.append(
+            schemas.PitchBlockRead(
+                key=block.key,
+                title=block.title,
+                period=block.period,
+                core_line=core,
+                hint=block.hint,
+                addons=[
+                    schemas.AddonRead(label=a.label, text=a.text, fits_track=a.fits(track))
+                    for a in chosen
+                ],
+            )
+        )
+
+    focus = None
+    if track is not None:
+        focus_row = session.scalar(select(models.TrackFocus).where(models.TrackFocus.track == track))
+        if focus_row is not None:
+            focus = schemas.FocusRead.model_validate(focus_row)
+
+    tips = list(session.scalars(select(models.PitchTip).order_by(models.PitchTip.position)))
+    pick = lambda kind: [schemas.TipRead.model_validate(t) for t in tips if t.kind == kind]
+
+    return schemas.Pitch(
+        length=length,
+        length_label=LENGTH_LABEL[length],
+        track=track,
+        vacancy_id=vacancy.id if vacancy else None,
+        vacancy_title=vacancy.title if vacancy else None,
+        company=vacancy.company.name if vacancy else None,
+        blocks=blocks,
+        focus=focus,
+        highlights=highlights,
+        hooks=pick("hook"),
+        faq=pick("faq"),
+        avoid=pick("avoid"),
+    )
+
+
 def get_stats(session: Session, stale_days: int = 7, horizon_days: int = 7) -> schemas.Stats:
     vacancies = list(
         session.scalars(select(models.Vacancy).options(selectinload(models.Vacancy.company)))

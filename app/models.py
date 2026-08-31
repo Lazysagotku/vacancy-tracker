@@ -6,6 +6,7 @@ import enum
 from datetime import date, datetime
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Enum,
@@ -55,6 +56,30 @@ class EventType(str, enum.Enum):
     rejection = "rejection"
 
 
+class Track(str, enum.Enum):
+    """Тип вакансии - от него зависят акценты в рассказе о себе."""
+
+    dev = "dev"          # C#/.NET разработчик
+    support = "support"  # поддержка, 2-3 линия
+    ai = "ai"            # ИИ-инженер, автоматизация
+
+
+class PitchLength(str, enum.Enum):
+    """Сборки рассказа по времени."""
+
+    short = "short"        # 40 секунд, HR просит коротко
+    standard = "standard"  # 2 минуты, основной вариант
+    full = "full"          # 4-5 минут, технарь просит подробно
+
+
+# Сколько добавок брать на блок в каждой сборке
+ADDONS_PER_LENGTH = {
+    PitchLength.short: 0,
+    PitchLength.standard: 2,
+    PitchLength.full: 4,
+}
+
+
 class Company(Base):
     __tablename__ = "companies"
 
@@ -93,6 +118,9 @@ class Vacancy(Base):
     next_action: Mapped[str | None] = mapped_column(String(300))
     next_action_at: Mapped[date | None] = mapped_column(Date, index=True)
 
+    track: Mapped[Track | None] = mapped_column(Enum(Track, name="vacancy_track"))
+    feedback: Mapped[str | None] = mapped_column(Text)   # что сказали после созвона/собеса
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -114,6 +142,76 @@ class Event(Base):
     calendar_event_id: Mapped[str | None] = mapped_column(String(200))  # связь с Google Calendar
 
     vacancy: Mapped["Vacancy"] = relationship(back_populates="events")
+
+
+class PitchBlock(Base):
+    """«Кирпич» рассказа о себе: якорь, место работы или блок про движение вперёд.
+
+    Учится не текст, а блоки - тогда рассказ не рассыпается, если перебили или попросили короче.
+    """
+
+    __tablename__ = "pitch_blocks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(50), unique=True)   # anchor, mgt, alfa, trinfico, future
+    position: Mapped[int] = mapped_column(Integer, index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    period: Mapped[str | None] = mapped_column(String(100))
+
+    core_line: Mapped[str] = mapped_column(Text)                # опорное предложение
+    core_line_alt: Mapped[str | None] = mapped_column(Text)     # вариант под другой трек
+    alt_for_track: Mapped[Track | None] = mapped_column(Enum(Track, name="alt_track"))
+
+    in_short: Mapped[bool] = mapped_column(Boolean, default=True)   # входит ли в сборку на 40 секунд
+    hint: Mapped[str | None] = mapped_column(Text)                  # как произносить
+
+    addons: Mapped[list["PitchAddon"]] = relationship(
+        back_populates="block", cascade="all, delete-orphan", order_by="PitchAddon.position"
+    )
+
+
+class PitchAddon(Base):
+    """Добавка к кирпичу: берётся 1-2 из списка, а не весь список сразу."""
+
+    __tablename__ = "pitch_addons"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    block_id: Mapped[int] = mapped_column(ForeignKey("pitch_blocks.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    label: Mapped[str] = mapped_column(String(100))
+    text: Mapped[str] = mapped_column(Text)
+    tracks: Mapped[str | None] = mapped_column(String(100))   # где добавка сильна: "dev,ai"
+
+    block: Mapped["PitchBlock"] = relationship(back_populates="addons")
+
+    def fits(self, track: Track | None) -> bool:
+        if track is None or not self.tracks:
+            return False
+        return track.value in [t.strip() for t in self.tracks.split(",")]
+
+
+class TrackFocus(Base):
+    """Акценты под тип вакансии: что усилить, что убрать."""
+
+    __tablename__ = "track_focus"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    track: Mapped[Track] = mapped_column(Enum(Track, name="focus_track"), unique=True)
+    title: Mapped[str] = mapped_column(String(200))
+    emphasize: Mapped[str] = mapped_column(Text)
+    drop: Mapped[str] = mapped_column(Text)
+
+
+class PitchTip(Base):
+    """Крючки, частые продолжения и то, чего избегать."""
+
+    __tablename__ = "pitch_tips"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), index=True)   # hook | faq | avoid
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    title: Mapped[str] = mapped_column(String(300))
+    body: Mapped[str | None] = mapped_column(Text)
 
 
 class Contact(Base):

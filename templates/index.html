@@ -54,7 +54,53 @@
   .s-reserve    { background: #f3ecd8; color: #8a6d1f; }
   .prio { font-weight: 700; color: var(--accent); }
   .row-actions select, .row-actions button { font: inherit; font-size: 0.85rem; padding: 0.2rem 0.4rem; }
+  .row-actions { white-space: nowrap; }
   .empty { padding: 2rem; text-align: center; color: var(--muted); }
+
+  /* Фидбек: правится по клику прямо в таблице */
+  .fb { cursor: text; min-height: 1.2rem; font-size: 0.86rem; color: var(--ink); }
+  .fb:hover { background: #fff8f2; outline: 1px dashed var(--line); }
+  .fb.empty-fb { color: #b3aca6; font-style: italic; }
+  .fb textarea { font: inherit; width: 100%; min-height: 4.5rem; border: 1px solid var(--accent); border-radius: 6px; padding: 0.3rem; }
+
+  /* Кнопка рассказа о себе */
+  .pitch-btn { border: 1px solid var(--ok); background: #eaf5ee; color: #235c3a; border-radius: 999px;
+               cursor: pointer; font-weight: 600; white-space: nowrap; margin-top: 0.3rem; display: block; }
+  .pitch-btn:hover { background: var(--ok); color: #fff; }
+
+  /* Окно самопрезентации */
+  .modal { position: fixed; inset: 0; z-index: 50; background: rgba(30, 24, 20, 0.55); display: grid; place-items: center; padding: 1.5rem; }
+  .modal[hidden] { display: none; }
+  .modal-box { background: #fff; border-radius: 14px; max-width: 54rem; width: 100%; max-height: 88vh; overflow: auto; padding: 1.5rem clamp(1rem, 3vw, 2rem) 2rem; }
+  .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; border-bottom: 1px solid var(--line); padding-bottom: 0.8rem; margin-bottom: 1rem; }
+  .modal-head h2 { margin: 0; font-size: 1.25rem; }
+  .modal-head p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.9rem; }
+  .modal-close { border: 1px solid var(--line); background: #fff; border-radius: 50%; width: 2rem; height: 2rem; font-size: 1.1rem; cursor: pointer; flex: none; }
+
+  .lengths { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
+  .lengths button { font: inherit; font-size: 0.86rem; padding: 0.3rem 0.8rem; border: 1px solid var(--line); background: #fff; border-radius: 999px; cursor: pointer; }
+  .lengths button.active { background: var(--dark); color: #fff; border-color: var(--dark); }
+
+  .focus-box { background: #fdf6f1; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 0.7rem 1rem; margin-bottom: 1.2rem; font-size: 0.92rem; }
+  .focus-box b { display: block; margin-bottom: 0.2rem; }
+  .focus-box .drop { color: var(--muted); margin-top: 0.4rem; }
+
+  .brick { border-left: 3px solid var(--line); padding: 0 0 0 1rem; margin-bottom: 1.3rem; }
+  .brick h3 { margin: 0 0 0.1rem; font-size: 0.98rem; }
+  .brick .period { color: var(--muted); font-size: 0.82rem; }
+  .brick .core { margin: 0.45rem 0 0; font-size: 1rem; }
+  .brick .hint { color: var(--muted); font-size: 0.84rem; margin-top: 0.4rem; font-style: italic; }
+  .brick ul { margin: 0.6rem 0 0; padding-left: 1.1rem; }
+  .brick li { margin-bottom: 0.45rem; font-size: 0.93rem; }
+  .brick li b { color: var(--accent); }
+  .brick li.fit { background: #eaf5ee; border-radius: 6px; padding: 0.2rem 0.4rem; margin-left: -0.4rem; }
+  .brick li.fit b { color: #235c3a; }
+
+  .tips { border-top: 1px solid var(--line); margin-top: 1.2rem; padding-top: 1rem; }
+  .tips h4 { margin: 0 0 0.4rem; font-size: 0.92rem; }
+  .tips ul { margin: 0 0 1rem; padding-left: 1.1rem; }
+  .tips li { font-size: 0.9rem; margin-bottom: 0.35rem; }
+  .tips li span { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -82,14 +128,33 @@
         <th style="width:3rem">Пр.</th>
         <th>Компания и роль</th>
         <th style="width:9rem">Статус</th>
-        <th style="width:7rem">Формат</th>
-        <th style="width:8rem">Зарплата</th>
+        <th style="width:6rem">Формат</th>
+        <th style="width:7rem">Зарплата</th>
+        <th style="width:14rem">Фидбек</th>
         <th style="width:12rem">Действие</th>
       </tr>
     </thead>
     <tbody id="rows"></tbody>
   </table>
   <div class="empty" id="empty" hidden>Ничего не найдено</div>
+</div>
+
+<div class="modal" id="pitchModal" hidden role="dialog" aria-modal="true" aria-labelledby="pitchTitle">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div>
+        <h2 id="pitchTitle">Рассказ о себе</h2>
+        <p id="pitchFor"></p>
+      </div>
+      <button class="modal-close" type="button" aria-label="Закрыть" onclick="closePitch()">×</button>
+    </div>
+    <div class="lengths" id="lengths">
+      <button data-len="short">40 секунд</button>
+      <button data-len="standard" class="active">2 минуты</button>
+      <button data-len="full">4-5 минут</button>
+    </div>
+    <div id="pitchBody"></div>
+  </div>
 </div>
 
 <script>
@@ -105,9 +170,16 @@ const EVENTS = {
   offer: "оффер", rejection: "отказ", note: "заметка",
 };
 
+// Статусы, где уже есть контакт с работодателем: показываем кнопку рассказа о себе
+const SHOW_PITCH = new Set(["screening", "interview", "offer"]);
+const TRACK_LABEL = { dev: "C#/.NET разработчик", support: "поддержка, 2-3 линия", ai: "ИИ-инженер, автоматизация" };
+
 let currentStatus = "";
 let currentSearch = "";
+let pitchVacancyId = null;
+let pitchLength = "standard";
 
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const money = (v) => v ? (v / 1000).toFixed(0) + "к" : null;
 
 function salaryText(v) {
@@ -149,19 +221,54 @@ async function loadRows() {
     <tr>
       <td class="prio">${v.priority}</td>
       <td>
-        <span class="company">${v.company.name}</span> - ${v.title}
-        ${v.match_note ? `<span class="note">${v.match_note.slice(0, 120)}</span>` : ""}
+        <span class="company">${esc(v.company.name)}</span> - ${esc(v.title)}
+        ${v.match_note ? `<span class="note">${esc(v.match_note.slice(0, 120))}</span>` : ""}
       </td>
       <td><span class="pill s-${v.status}">${STATUS_LABEL[v.status] || v.status}</span></td>
       <td>${FORMAT_LABEL[v.work_format]}</td>
       <td>${salaryText(v)}</td>
+      <td>
+        <div class="fb ${v.feedback ? "" : "empty-fb"}" onclick="editFeedback(this, ${v.id})"
+             title="Нажмите, чтобы записать фидбек">${v.feedback ? esc(v.feedback) : "записать фидбек"}</div>
+      </td>
       <td class="row-actions">
         <select onchange="addEvent(${v.id}, this.value); this.value='';">
           <option value="">+ событие</option>
           ${Object.entries(EVENTS).map(([k, label]) => `<option value="${k}">${label}</option>`).join("")}
         </select>
+        ${SHOW_PITCH.has(v.status)
+          ? `<button class="pitch-btn" onclick="openPitch(${v.id})">🎤 рассказ о себе</button>` : ""}
       </td>
     </tr>`).join("");
+}
+
+// --- Фидбек правится прямо в таблице ---
+async function editFeedback(cell, vacancyId) {
+  if (cell.querySelector("textarea")) return;
+  const current = cell.classList.contains("empty-fb") ? "" : cell.textContent.trim();
+  cell.innerHTML = "";
+  const area = document.createElement("textarea");
+  area.value = current;
+  area.placeholder = "Что сказали после созвона или собеса";
+  cell.appendChild(area);
+  area.focus();
+
+  const save = async () => {
+    const value = area.value.trim();
+    if (value !== current) {
+      await fetch(`/api/vacancies/${vacancyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback: value || null }),
+      });
+    }
+    loadRows();
+  };
+  area.addEventListener("blur", save, { once: true });
+  area.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { area.removeEventListener("blur", save); loadRows(); }
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) area.blur();
+  });
 }
 
 async function addEvent(vacancyId, type) {
@@ -175,6 +282,80 @@ async function addEvent(vacancyId, type) {
   });
   refresh();
 }
+
+// --- Рассказ о себе ---
+async function openPitch(vacancyId) {
+  pitchVacancyId = vacancyId;
+  document.getElementById("pitchModal").hidden = false;
+  document.body.style.overflow = "hidden";
+  await renderPitch();
+}
+
+function closePitch() {
+  document.getElementById("pitchModal").hidden = true;
+  document.body.style.overflow = "";
+  pitchVacancyId = null;
+}
+
+async function renderPitch() {
+  const p = await (await fetch(`/api/vacancies/${pitchVacancyId}/pitch?length=${pitchLength}`)).json();
+
+  document.getElementById("pitchFor").textContent =
+    `${p.company} - ${p.vacancy_title} · ${p.length_label}` +
+    (p.track ? ` · акценты под «${TRACK_LABEL[p.track] || p.track}»` : " · тип вакансии не определён");
+
+  const parts = [];
+
+  if (p.focus) {
+    parts.push(`<div class="focus-box">
+      <b>Что подчеркнуть: ${esc(p.focus.title)}</b>
+      ${esc(p.focus.emphasize)}
+      <div class="drop">Убрать: ${esc(p.focus.drop)}</div>
+    </div>`);
+  } else {
+    parts.push(`<div class="focus-box"><b>Тип вакансии не определён</b>
+      Акценты не подобраны - рассказ собран нейтрально. Проставьте трек вакансии, чтобы добавки
+      подбирались под неё.</div>`);
+  }
+
+  parts.push(p.blocks.map(b => `
+    <div class="brick">
+      <h3>${esc(b.title)}</h3>
+      ${b.period ? `<div class="period">${esc(b.period)}</div>` : ""}
+      <p class="core">${esc(b.core_line)}</p>
+      ${b.addons.length ? `<ul>${b.addons.map(a =>
+        `<li class="${a.fits_track ? "fit" : ""}"><b>${esc(a.label)}:</b> ${esc(a.text)}</li>`).join("")}</ul>` : ""}
+      ${b.hint ? `<div class="hint">${esc(b.hint)}</div>` : ""}
+    </div>`).join(""));
+
+  const list = (items, render) => items.map(render).join("");
+  parts.push(`<div class="tips">
+    <h4>Крючки - сказать коротко и ждать вопроса</h4>
+    <ul>${list(p.hooks, t => `<li>${esc(t.title)} <span>${esc(t.body || "")}</span></li>`)}</ul>
+    <h4>Частые продолжения</h4>
+    <ul>${list(p.faq, t => `<li><b>${esc(t.title)}</b> <span>${esc(t.body || "")}</span></li>`)}</ul>
+    <h4>Чего избегать</h4>
+    <ul>${list(p.avoid, t => `<li>${esc(t.title)} <span>${esc(t.body || "")}</span></li>`)}</ul>
+  </div>`);
+
+  document.getElementById("pitchBody").innerHTML = parts.join("");
+}
+
+document.getElementById("lengths").addEventListener("click", (e) => {
+  const button = e.target.closest("button[data-len]");
+  if (!button) return;
+  document.querySelectorAll("#lengths button").forEach(b => b.classList.remove("active"));
+  button.classList.add("active");
+  pitchLength = button.dataset.len;
+  renderPitch();
+});
+
+document.getElementById("pitchModal").addEventListener("click", (e) => {
+  if (e.target.id === "pitchModal") closePitch();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !document.getElementById("pitchModal").hidden) closePitch();
+});
 
 function refresh() { loadStats(); loadRows(); }
 

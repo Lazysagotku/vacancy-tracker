@@ -6,7 +6,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models import EventType, Status, WorkFormat
+from app.models import EventType, PitchLength, Status, Track, WorkFormat
 
 
 class CompanyBase(BaseModel):
@@ -63,6 +63,8 @@ class VacancyBase(BaseModel):
     applied_at: date | None = None
     next_action: str | None = None
     next_action_at: date | None = None
+    track: Track | None = None
+    feedback: str | None = None
 
 
 class VacancyCreate(VacancyBase):
@@ -84,6 +86,8 @@ class VacancyUpdate(BaseModel):
     applied_at: date | None = None
     next_action: str | None = None
     next_action_at: date | None = None
+    track: Track | None = None
+    feedback: str | None = None
 
 
 class VacancyRead(VacancyBase):
@@ -97,6 +101,59 @@ class VacancyRead(VacancyBase):
 
 class VacancyDetail(VacancyRead):
     events: list[EventRead] = []
+
+
+class AddonRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    label: str
+    text: str
+    fits_track: bool = False   # усилена ли эта добавка под трек вакансии
+
+
+class PitchBlockRead(BaseModel):
+    """Кирпич в собранном виде: опорная фраза плюс отобранные добавки."""
+
+    key: str
+    title: str
+    period: str | None = None
+    core_line: str
+    hint: str | None = None
+    addons: list[AddonRead] = []
+
+
+class FocusRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    track: Track
+    title: str
+    emphasize: str
+    drop: str
+
+
+class TipRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    kind: str
+    title: str
+    body: str | None = None
+
+
+class Pitch(BaseModel):
+    """Рассказ о себе, собранный под конкретную вакансию и длительность."""
+
+    length: PitchLength
+    length_label: str
+    track: Track | None = None
+    vacancy_id: int | None = None
+    vacancy_title: str | None = None
+    company: str | None = None
+    blocks: list[PitchBlockRead] = []
+    focus: FocusRead | None = None
+    highlights: list[str] = []   # что подчеркнуть именно для этой вакансии
+    hooks: list[TipRead] = []
+    faq: list[TipRead] = []
+    avoid: list[TipRead] = []
 
 
 class Stats(BaseModel):
